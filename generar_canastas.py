@@ -3,7 +3,7 @@
 import os
 import time
 from datetime import date
-from copy import copy
+from copy import copy, deepcopy
 import tkinter.filedialog
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4
@@ -14,6 +14,8 @@ from decimal import Decimal
 import tkinter as tk
 from tkinter.simpledialog import askstring, askinteger
 from tkinter.messagebox import showerror
+
+from productos import frutas_prod, verduras_prod
 
 
 def to_integer(number):
@@ -202,38 +204,42 @@ deben_estar = (set_rango | agregados_s) - eliminados_s
 lista_definitiva = [pedido for indice, pedido in lista_definitiva if indice in deben_estar]
 
 # lista_definitiva = lista_definitiva[inputs[0] - 1:inputs[1]]
-print(len(lista_definitiva))
+# print(len(lista_definitiva))
+dicc_frutas = dict((fruta, dict()) for fruta in frutas_prod)
+dicc_verduras = dict((verdura, dict()) for verdura in verduras_prod)
 
-nro_pedido = 1
 for pedido in lista_definitiva:
-    # print(pedido[2])
     for item in pedido:
-        # print(item)
-        if item[0] in diccionario_productos:
-            diccionario_productos[item[0]] += clean_safe(item[1])
-    # print(" $$$$$$$$$$$$$$$$$$$$$$$$$$$$$")
-
-
+        if item[0] in dicc_frutas:
+            if item[1] in dicc_frutas[item[0]]:
+                dicc_frutas[item[0]][item[1]] += 1
+            else:
+                dicc_frutas[item[0]][item[1]] = 1
+        if item[0] in dicc_verduras:
+            if item[1] in dicc_verduras[item[0]]:
+                dicc_verduras[item[0]][item[1]] += 1
+            else:
+                dicc_verduras[item[0]][item[1]] = 1
 
 
 horario_ = str(time.strftime("%H %M %S"))  # Formato de 24 horas
 fecha = time.strftime("%d-%m-%y")
 today = date.today()
 week_number = today.isocalendar()[1]
-if not os.path.exists("Compras"):
-    os.mkdir("Compras")
+if not os.path.exists("Produccion"):
+    os.mkdir("Produccion")
 
-nombre_carpeta = f"Compras Semana {week_number}"
-ruta = f"Compras" + "/" + nombre_carpeta
+nombre_carpeta = f"Produccion Semana {week_number}"
+ruta = f"Produccion" + "/" + nombre_carpeta
 # ruta = os.join("Compras", nombre_carpeta)
 if not os.path.exists(ruta):
     os.mkdir(ruta)
 
-nombre_archivo = f"Compras Semana {week_number}    (pedidos del {inputs[0]} al {inputs[1]})"
+nombre_archivo = f"Produccion Semana {week_number}    (pedidos del {inputs[0]} al {inputs[1]})"
 ruta_final = ruta + "/" + nombre_archivo
 
 encabezado = []
-hora_fecha = f"Documento de compras generado el {fecha} a las {horario_}"
+hora_fecha = f"Documento de produccion generado el {fecha} a las {horario_}"
 encabezado.append(nombre_archivo)
 encabezado.append(hora_fecha)
 sacados = f"Los pedidos no considerados son: "
@@ -260,13 +266,30 @@ if agregar != []:
         con += 1
     encabezado.append(agregado) 
 
-diccionario_final = dict()
-for i, elem in enumerate(encabezado):
-    diccionario_final[i] = elem
-for key, value in diccionario_productos.items():
-    if value != 0:
-        diccionario_final[key] = value
-        print(f"{key}: ----------> {value}")
+
+f_dict_verduras = deepcopy(dicc_verduras)
+f_dict_frutas = deepcopy(dicc_frutas)
+
+for key, value in dicc_frutas.items():
+    lista = [(peso, veces) for peso, veces in value.items()]
+    lista.sort(key=lambda x: x[0], reverse=False)
+    f_dict_frutas[key] = copy(lista)
+    if lista == []:
+        del f_dict_frutas[key]
+    
+for key, value in dicc_verduras.items():
+    lista = [(peso, veces) for peso, veces in value.items()]
+    lista.sort(key=lambda x: x[0], reverse=False)
+    f_dict_verduras[key] = copy(lista)
+    if lista == []:
+        del f_dict_verduras[key]
+    
+
+for key, value in f_dict_frutas.items():
+    print(f"{key}  ----->   {f_dict_frutas[key]}")
+for key, value in f_dict_verduras.items():
+    print(f"{key}  ----->   {f_dict_verduras[key]}")
+
 
 c = canvas.Canvas(ruta_final, pagesize=A4)
 c.setLineWidth(.3)
@@ -278,9 +301,85 @@ aux = 1
 aux_2 = 0
 linea_sig = 15  # Decremento normal para siguiente linea.
 contador = 0
-for producto, cantidad in diccionario_final.items():
+for elemento in encabezado:
+    c.drawString(horiz_izq, linea, elemento)
+    c.setFont('Helvetica-Bold', 12)
+    aux += 1
+    if aux == 5:
+        c.line(horiz_izq, linea - 2, 500, linea - 2)
+        linea -= (linea_sig + 5)
+    else:
+        linea -= linea_sig
+
+c.setFont('Helvetica', 12)
+for fruta, cantidades in f_dict_frutas.items():
+    if contador + len(cantidades) >= 34:
+        contador = -3
+        c.showPage()
+        linea = 785  # Donde comienza la primera linea
+        horiz_izq = 40  # Donde se ubica la lista de productos a la izq.
+        horiz_der = 450  # Donde se ubica la lista de cantidades a la der.
+        linea_sig = 15  # Decremento normal para siguiente linea.
+    c.rect(horiz_izq - 3, linea - 4, horiz_der - horiz_izq + 15, 20)
+    c.drawString(horiz_izq, linea, f"{cut_name(fruta)}")
+    contador += 1
+    linea -= linea_sig
+    for cantidad in cantidades:
+        c.drawString(horiz_izq + 15, linea, f"{cantidad[0]} ------->")
+        c.drawString(horiz_izq + 55, linea, f"{cantidad[1]}")
+        contador += 1
+        linea -= linea_sig
+    linea -= 5
+
+contador = -3
+c.showPage()
+linea = 785  # Donde comienza la primera linea
+horiz_izq = 40  # Donde se ubica la lista de productos a la izq.
+horiz_der = 450  # Donde se ubica la lista de cantidades a la der.
+linea_sig = 15  # Decremento normal para siguiente linea.
+
+for verdura, cantidades in f_dict_verduras.items():
+    if contador + len(cantidades) >= 34:
+        contador = -3
+        c.showPage()
+        linea = 785  # Donde comienza la primera linea
+        horiz_izq = 40  # Donde se ubica la lista de productos a la izq.
+        horiz_der = 450  # Donde se ubica la lista de cantidades a la der.
+        linea_sig = 15  # Decremento normal para siguiente linea.
+    c.rect(horiz_izq - 3, linea - 4, horiz_der - horiz_izq + 15, 20)
+    c.drawString(horiz_izq, linea, f"{cut_name(verdura)}")
+    contador += 1
+    linea -= 20
+    for cantidad in cantidades:
+        c.drawString(horiz_izq + 15, linea, f"{cantidad[0]} ------->")
+        c.drawString(horiz_izq + 55, linea, f"{cantidad[1]}")
+        contador += 1
+        linea -= 20
+c.save()
+
+
+
+
+
+
+
+
+
+
+
+c = canvas.Canvas(ruta_final, pagesize=A4)
+c.setLineWidth(.3)
+c.setFont('Helvetica-Bold', 16)
+linea = 785  # Donde comienza la primera linea
+horiz_izq = 40  # Donde se ubica la lista de productos a la izq.
+horiz_der = 450  # Donde se ubica la lista de cantidades a la der.
+aux = 1
+aux_2 = 0
+linea_sig = 15  # Decremento normal para siguiente linea.
+contador = 0
+for elemento in encabezado:
     if aux <= 4:
-        c.drawString(horiz_izq, linea, cantidad)
+        c.drawString(horiz_izq, linea, encabezado[aux - 1])
         c.setFont('Helvetica-Bold', 12)
         aux += 1
         if aux == 5:
